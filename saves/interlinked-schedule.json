@@ -1,0 +1,218 @@
+{
+  "slug": "interlinked-schedule",
+  "projectName": "Interlinked Schedule",
+  "cards": [
+    {
+      "type": "feature",
+      "title": "两级甘特折叠",
+      "desc": "每个 video 默认显示一行 summary 条，点击切换 expanded 布尔值展开 / 折叠。展开后显示 Global Tasks 行 + 8 个语言行，折叠后只保留 summary 行。每个 video 独立控制。"
+    },
+    {
+      "type": "feature",
+      "title": "新建项目自动模板",
+      "desc": "addVideo() 自动生成完整结构：8 个默认语言（ZHCN/JAJP/ENGB/DEDE/FRFR/PTBR/ESMX/FRCA），每个语言 25 个阶段，offset 和 act 按 LOCALE_STAGE_TEMPLATE 预计算填入。"
+    },
+    {
+      "type": "feature",
+      "title": "甘特拖拽调期",
+      "desc": "mousedown → mousemove → mouseup 三阶段：水平移动 > 5px 判定为拖拽。拖 block 左半区改 offset（移位），拖右侧 8px 改 act（时长）。拖拽过程实时重绘 canvas，mouseup 后 commitChange。"
+    },
+    {
+      "type": "feature",
+      "title": "自动级联 (autoLevel)",
+      "desc": "移动 block 时，同语言行内所有 offset ≥ 原 block 终点的 block 自动加相同 delta。级联快照在 mousedown 时冻结，mousemove 用绝对 delta 计算避免累积漂移。跨语言行不级联。"
+    },
+    {
+      "type": "feature",
+      "title": "Undo / Redo 历史回退",
+      "desc": "commitChange() 在非恢复状态时将 JSON 快照压入 historyStack（上限 50 条）。undo/redo 回退 historyIndex，反序列化还原 sprints + masterStages + localeStages，再 pushToServer + renderAll。"
+    },
+    {
+      "type": "feature",
+      "title": "Sprint 管理",
+      "desc": "支持多 Sprint：新建（prompt 命名）、重命名、删除（至少保留一个）、切换。切换时更新 curSpId 并重渲染。Sprint 选择器 <select> 与数据同步。"
+    },
+    {
+      "type": "feature",
+      "title": "Stage 自定义设置",
+      "desc": "openStageSettings() 打开 Modal，分 master/locale 双列渲染可编辑行（颜色 + 名称 + 删除）。saveStageSettings() 读取 DOM 写回数组并 commitChange。支持新增 Stage、删除 Stage。"
+    },
+    {
+      "type": "feature",
+      "title": "批量导入",
+      "desc": "execImport() 解析 textarea 文本，每行取第一个 token 作为项目名，自动生成完整 video（8语言×25阶段）并 push 到当前 Sprint。调用前先 ensureDefaultLocaleStages()。"
+    },
+    {
+      "type": "feature",
+      "title": "导出 CSV",
+      "desc": "exportCSV() 遍历当前 Sprint 所有 video 的语言和 block，输出 [Project, Language, Stage, Start, End] 五列，用 addWkDays 计算绝对日期，触发浏览器下载。"
+    },
+    {
+      "type": "feature",
+      "title": "导出 Gantt PNG",
+      "desc": "exportGantt() 调用 html2canvas 截取 #gantt-scroll-container，触发浏览器下载 PNG。依赖外部 html2canvas 库。"
+    },
+    {
+      "type": "feature",
+      "title": "Baseline 基准线对比",
+      "desc": "saveBaseline() 把当前 startDate 和计算出的最晚结束日存入 v._baselineStart / v._baselineEnd。toggleBaseline() 切换 showBaseline 标志，renderGantt() 在 summary 行额外绘制橙色虚框。"
+    },
+    {
+      "type": "feature",
+      "title": "甘特缩放",
+      "desc": "zoomIn() / zoomOut() 修改 zoomLevel（0.25x–3.0x，步长 0.25）。effectivePPD = pixelsPerDay × zoomLevel 影响 canvas 宽度和所有 block 的 x 坐标计算。"
+    },
+    {
+      "type": "feature",
+      "title": "Notes 备注",
+      "desc": "三级备注：video 级、language 级、block 级。saveNotes() 根据 notes-lI / notes-bI 是否为空来定位写入目标。Notes Modal 打开时传入 vI/lI/bI 索引。"
+    },
+    {
+      "type": "feature",
+      "title": "主题切换 (light / dark)",
+      "desc": "toggleTheme() 读写 document.documentElement 的 data-theme 属性（而非 body），在 light 和 dark 之间切换。CSS 变量响应主题变化。"
+    },
+    {
+      "type": "feature",
+      "title": "Factory Reset",
+      "desc": "factoryReset() 清空 sprints（还原为单 Sprint 1）、masterStages、localeStages、historyStack，commitChange 推送空状态。需要 confirm 二次确认。"
+    },
+    {
+      "type": "ui",
+      "title": "Canvas 甘特图",
+      "desc": "纯 canvas 渲染，不用 DOM 表格。renderGantt() 先构建 ganttRenderRows 列表（模块级变量），再遍历绘制网格线和 block。summary 行浅蓝背景 + 半透明总跨度条，locale/global 行绘制彩色阶段块 + 白色标签文字。"
+    },
+    {
+      "type": "ui",
+      "title": "甘特侧边栏",
+      "desc": "#gantt-sidebar 与 canvas 同步滚动。summary 行：▶/▼ 切换箭头 + 粗体 video 名，点击触发折叠。Global Tasks 行和语言行缩进 20px 显示标签。高度与 canvas 行严格对齐（rowHeight=32px）。"
+    },
+    {
+      "type": "ui",
+      "title": "Sprint 下拉选择器",
+      "desc": "#sprint-selector <select>，由 renderSprintSelector() 填充 option 列表。onchange 触发 switchSprint()。initData() 末尾必须调用 renderSprintSelector() 保证初始化时填充。"
+    },
+    {
+      "type": "ui",
+      "title": "Sprint 管理 Modal",
+      "desc": "#sprint-modal，openSprintManager() 渲染当前 Sprint 列表（名称/重命名/删除按钮）。只有一个 Sprint 时隐藏删除按钮。包含「新建 Sprint」按钮。"
+    },
+    {
+      "type": "ui",
+      "title": "Stage 设置 Modal",
+      "desc": "#settings-modal，双列布局：左侧 Master Stages，右侧 Locale Stages。每行：颜色 picker + 名称输入 + 删除按钮。底部有「新增阶段」和「保存」按钮。"
+    },
+    {
+      "type": "ui",
+      "title": "导入 Modal",
+      "desc": "#import-modal，包含一个 #import-text textarea，每行输入一个项目名。「导入」按钮触发 execImport()。"
+    },
+    {
+      "type": "ui",
+      "title": "Notes Modal",
+      "desc": "#notes-modal，含三个隐藏 input（notes-vI / notes-lI / notes-bI）记录层级索引，textarea #notes-text 编辑内容，saveNotes() 按索引写回数据。"
+    },
+    {
+      "type": "ui",
+      "title": "工具栏",
+      "desc": "顶部工具栏包含：Undo (#btn-undo)、Redo (#btn-redo，初始 disabled）、Zoom In/Out、Baseline 开关、Auto-Cascade 开关 (#btn-autolevel，显示 ON/OFF 状态）、Export CSV、Export PNG、Stage 设置、Import。"
+    },
+    {
+      "type": "ui",
+      "title": "Tooltip",
+      "desc": "#canvas-tooltip，鼠标悬停在 block 上时显示「阶段名\\n开始日期 → 结束日期」。拖拽中隐藏。mouseleave canvas 时隐藏。"
+    },
+    {
+      "type": "data",
+      "title": "Sprint 数据结构",
+      "desc": "{ id: string, name: string, isLocked: bool, videos: Video[] }。全局 let sprints = []，curSpId 记录当前 Sprint id。"
+    },
+    {
+      "type": "data",
+      "title": "Video 数据结构",
+      "desc": "{ id: 'v_xxx', name: 'MS0001', startDate: 'YYYY-MM-DD', priority: 3, expanded: false, notes: '', blocks: Block[], languages: Language[], _baselineStart?: string, _baselineEnd?: string }"
+    },
+    {
+      "type": "data",
+      "title": "Language / Block 数据结构",
+      "desc": "Language: { name: string, blocks: Block[] }。Block: { type: stageId, offset: number, act: number, notes: string }。offset/act 单位均为工作日。"
+    },
+    {
+      "type": "data",
+      "title": "Stage 数据结构",
+      "desc": "masterStages / localeStages 均为 { id: string, name: string, color: string }[]。localeStages 标准有 25 个，ID 为 ls_0…ls_24。旧数据库可能只有 5 个旧格式 ID，需 ensureDefaultLocaleStages() 升级。"
+    },
+    {
+      "type": "data",
+      "title": "LOCALE_STAGE_TEMPLATE（25阶段）",
+      "desc": "固定常量数组，定义 25 个阶段的 name/offset/act。注意 offset 16、26、34 各有两个并行阶段（同时开始），这是正确设计。新建 video 时按此模板初始化 block。"
+    },
+    {
+      "type": "data",
+      "title": "ganttRenderRows（模块级）",
+      "desc": "let ganttRenderRows = []（模块级，非 renderGantt 内局部变量）。每次 renderGantt() 重新赋值，供 setupCanvasClick() 的鼠标事件做 hit-test。结构：{ type: 'summary'|'global'|'locale', y, vI, lI, v, blocks, ... }"
+    },
+    {
+      "type": "data",
+      "title": "History Stack",
+      "desc": "historyStack: string[]（JSON 快照），historyIndex: number。快照格式：JSON.stringify({ sprints, masterStages, localeStages })。上限 50 条，超出时 shift() 删头。isRestoringHistory 标志防止回退时重复压栈。"
+    },
+    {
+      "type": "constraint",
+      "title": "只改 static/js/app.js",
+      "desc": "禁止修改：index.py、templates/index.html、static/css/style.css、utils/*.py、interlinked/**、tests.py。所有新功能必须在 app.js 内实现。"
+    },
+    {
+      "type": "constraint",
+      "title": "API 接口契约不变",
+      "desc": "GET /、GET|POST /api/sync、POST /api/schedule_update、POST /api/quick_add、POST /api/ai_schedule — 签名固定，不得修改。commitChange() 调用 pushToServer() 向后端同步。"
+    },
+    {
+      "type": "constraint",
+      "title": "工作日计算（跳过周末）",
+      "desc": "所有日期偏移使用 addWkDays() 而非直接加天数。diffDays() 计算像素位置。startDate 如果落在周末，自动顺延到下一个工作日。"
+    },
+    {
+      "type": "constraint",
+      "title": "旧数据库向后兼容",
+      "desc": "旧版 localeStages 可能只有 5 个旧格式 ID（trans_extract 等）。升级条件是 localeStages.length < LOCALE_STAGE_TEMPLATE.length（不能用 === 0）。ensureDefaultLocaleStages() 在 initData() 和 addVideo()/execImport() 前调用。"
+    },
+    {
+      "type": "constraint",
+      "title": "拖拽阈值与点击区分",
+      "desc": "水平移动 > 5px 才判定为拖拽，否则 mouseup 视为点击（summary 行切换折叠）。防止用户手抖触发意外拖拽。dragState.moved 标志区分两种行为。"
+    },
+    {
+      "type": "constraint",
+      "title": "运行环境",
+      "desc": "python3 index.py 启动本地服务器。无外部依赖（除 html2canvas CDN）。访问 http://localhost:{port}。不执行任何 git 命令。"
+    },
+    {
+      "type": "flow",
+      "title": "新建项目 → 渲染甘特图",
+      "desc": "点击「＋ 新建项目」→ addVideo() → ensureDefaultLocaleStages() → 生成 8语言×25阶段 video → push 到 sprints → commitChange() → pushToServer() → renderAll() → renderGantt() 绘制新 summary 行"
+    },
+    {
+      "type": "flow",
+      "title": "拖拽调期完整流程",
+      "desc": "mousedown 记录 dragState（dataBlocks、origOffset/Act、cascadeOriginals 快照）→ mousemove 判定 >5px 后实时改 block 数据 + renderGantt() 预览 → mouseup 调用 commitChange() 持久化 → pushToServer() 同步后端"
+    },
+    {
+      "type": "flow",
+      "title": "折叠 / 展开 video",
+      "desc": "点击 sidebar summary 标签 OR canvas summary 行（且未拖拽）→ v.expanded 取反 → commitChange() → renderGantt() 重建 ganttRenderRows + 重绘 canvas + 重建 sidebar DOM"
+    },
+    {
+      "type": "flow",
+      "title": "批量导入项目",
+      "desc": "打开 Import Modal → textarea 每行输入项目名 → execImport() → ensureDefaultLocaleStages() → 解析每行 → 生成 video → push 到当前 Sprint → 关闭 Modal → commitChange()"
+    },
+    {
+      "type": "flow",
+      "title": "Stage 设置更新 → 重渲染颜色",
+      "desc": "openStageSettings() 渲染 DOM 行 → 用户修改颜色/名称 → saveStageSettings() 读 DOM 写回 masterStages / localeStages → commitChange() → renderGantt() 用新颜色重绘所有 block"
+    }
+  ],
+  "wfElements": [],
+  "wfNextId": 7
+}
