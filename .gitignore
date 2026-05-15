@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 .DS_Store
 saves/default.json
+.env
+ui/node_modules/
+ui/dist/
+saves/wf_cache/

@@ -3,6 +3,7 @@ import os
 import re
 import json
 import shutil
+import hashlib
 import threading
 import webbrowser
 import http.server
@@ -12,10 +13,25 @@ import socket
 import time
 
 BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
-SAVES_DIR = os.path.join(BASE_DIR, 'saves')
+
+# Load .env if present
+_env_path = os.path.join(BASE_DIR, '.env')
+if os.path.exists(_env_path):
+    with open(_env_path, 'r', encoding='utf-8') as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith('#') and '=' in _line:
+                _k, _, _v = _line.partition('=')
+                _k, _v = _k.strip(), _v.strip()
+                if _k and _v and _k not in os.environ:
+                    os.environ[_k] = _v
+SAVES_DIR    = os.path.join(BASE_DIR, 'saves')
+WF_CACHE_DIR = os.path.join(SAVES_DIR, 'wf_cache')
+UI_DIST      = os.path.join(BASE_DIR, 'ui', 'dist')
 
 sys.path.insert(0, BASE_DIR)
 from ai.spec_generator import generate_spec
+from ai.wireframe_generator import generate_wireframe
 
 
 # ─── helpers ────────────────────────────────────────────
@@ -26,6 +42,11 @@ def ensure_saves_dir():
     new = os.path.join(SAVES_DIR, 'default.json')
     if os.path.exists(old) and not os.path.exists(new):
         shutil.move(old, new)
+
+
+def wf_cache_key(source_type: str, source_path: str) -> str:
+    raw = f'{source_type}:{source_path.strip()}'
+    return hashlib.md5(raw.encode()).hexdigest()[:16]
 
 
 def slugify(name: str) -> str:
@@ -68,30 +89,39 @@ def list_projects() -> list:
 class DemiurgeHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
-        p = self.path
-
-        if p in ('/', '/index.html'):
-            self._serve_file(os.path.join(BASE_DIR, 'ui', 'index.html'), 'text/html')
-            return
-
-        if p.startswith('/ui/'):
-            self._serve_file(os.path.join(BASE_DIR, p[1:]), self._mime(p))
-            return
+        parsed = urllib.parse.urlparse(self.path)
+        p      = parsed.path
 
         if p == '/api/projects':
             self._json_response(json.dumps(list_projects()))
             return
 
+        if p == '/api/wf_cache':
+            qs      = urllib.parse.parse_qs(parsed.query)
+            s_type  = qs.get('type', ['local'])[0]
+            s_path  = qs.get('path', [''])[0].strip()
+            if not s_path:
+                self._json_response('{"exists":false}')
+                return
+            os.makedirs(WF_CACHE_DIR, exist_ok=True)
+            key   = wf_cache_key(s_type, s_path)
+            fpath = os.path.join(WF_CACHE_DIR, key + '.json')
+            if os.path.exists(fpath):
+                with open(fpath, 'r', encoding='utf-8') as f:
+                    self._json_response(f.read())
+            else:
+                self._json_response('{"exists":false}')
+            return
+
         if p.startswith('/api/projects/load'):
-            qs   = urllib.parse.parse_qs(urllib.parse.urlparse(p).query)
+            qs   = urllib.parse.parse_qs(parsed.query)
             slug = safe_slug(qs.get('slug', ['default'])[0])
             fpath = os.path.join(SAVES_DIR, slug + '.json')
             if os.path.exists(fpath):
                 with open(fpath, 'r', encoding='utf-8') as f:
                     data = f.read()
             else:
-                data = json.dumps({'cards': [], 'wfElements': [], 'wfNextId': 1,
-                                   'projectName': slug})
+                data = json.dumps({'cards': [], 'excalidrawData': None, 'projectName': slug})
             self._json_response(data)
             return
 
@@ -104,7 +134,18 @@ class DemiurgeHandler(http.server.SimpleHTTPRequestHandler):
             self._json_response(data)
             return
 
-        self.send_response(404); self.end_headers()
+        # Static files from ui/dist/
+        if p in ('/', '/index.html'):
+            self._serve_file(os.path.join(UI_DIST, 'index.html'), 'text/html')
+            return
+
+        file_path = os.path.join(UI_DIST, p.lstrip('/'))
+        if os.path.isfile(file_path):
+            self._serve_file(file_path, self._mime(p))
+            return
+
+        # SPA fallback
+        self._serve_file(os.path.join(UI_DIST, 'index.html'), 'text/html')
 
     def do_POST(self):
         length = int(self.headers.get('Content-Length', 0))
@@ -173,6 +214,29 @@ class DemiurgeHandler(http.server.SimpleHTTPRequestHandler):
             self._json_response(json.dumps({'spec': spec_md}))
             return
 
+        if p == '/api/analyze_source':
+            payload = json.loads(body)
+            source_type = payload.get('type', 'github')
+            source_path = payload.get('path', '').strip()
+            if not source_path:
+                self._json_response(json.dumps({'error': '请提供路径'}))
+                return
+            try:
+                result = generate_wireframe(source_type, source_path)
+                # Auto-save to local cache
+                result['exists']      = True
+                result['source_path'] = source_path
+                result['source_type'] = source_type
+                result['cached_at']   = time.strftime('%Y-%m-%d %H:%M')
+                os.makedirs(WF_CACHE_DIR, exist_ok=True)
+                key = wf_cache_key(source_type, source_path)
+                with open(os.path.join(WF_CACHE_DIR, key + '.json'), 'w', encoding='utf-8') as f:
+                    json.dump(result, f, ensure_ascii=False)
+                self._json_response(json.dumps(result, ensure_ascii=False))
+            except Exception as e:
+                self._json_response(json.dumps({'error': str(e)}))
+            return
+
         self.send_response(404); self.end_headers()
 
     def do_OPTIONS(self):
@@ -202,10 +266,15 @@ class DemiurgeHandler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(encoded)
 
     def _mime(self, path):
-        if path.endswith('.js'):  return 'application/javascript'
-        if path.endswith('.css'): return 'text/css'
-        if path.endswith('.html'): return 'text/html'
-        return 'text/plain'
+        if path.endswith(('.js', '.mjs')): return 'application/javascript'
+        if path.endswith('.css'):          return 'text/css'
+        if path.endswith('.html'):         return 'text/html'
+        if path.endswith('.svg'):          return 'image/svg+xml'
+        if path.endswith('.png'):          return 'image/png'
+        if path.endswith('.ico'):          return 'image/x-icon'
+        if path.endswith('.woff2'):        return 'font/woff2'
+        if path.endswith('.woff'):         return 'font/woff'
+        return 'application/octet-stream'
 
     def log_message(self, format, *args):
         pass
