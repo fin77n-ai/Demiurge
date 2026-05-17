@@ -247,6 +247,10 @@ textarea.inp { resize: vertical; min-height: 52px; font-family: inherit; }
 .export-btn:hover { border-color: var(--primary); }
 .export-btn strong { font-size: 12px; color: var(--text); }
 .export-btn small { font-size: 10px; color: var(--text2); }
+.export-btn-claude { background: #7c6af714; border-color: #7c6af744; }
+.export-btn-claude:hover { border-color: var(--primary); background: #7c6af722; }
+.export-btn-claude strong { color: var(--primary); }
+.export-btn-claude:disabled { opacity: 0.4; cursor: default; }
 .stat-row {
   display: flex;
   justify-content: space-between;

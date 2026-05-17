@@ -15,6 +15,7 @@ export default function SourceAnalyzerModal({ onAppend, onClose }) {
   const [error, setError]           = useState('')
   const [result, setResult]         = useState(null)
   const [cacheInfo, setCacheInfo]   = useState(null)  // {cached_at, projectType, pages}
+  const [isDragOver, setIsDragOver] = useState(false)
   const phaseTimer  = useRef(null)
   const cacheTimer  = useRef(null)
 
@@ -47,8 +48,10 @@ export default function SourceAnalyzerModal({ onAppend, onClose }) {
     return () => clearTimeout(cacheTimer.current)
   }, [path, sourceType])
 
-  const analyze = async () => {
-    if (!path.trim()) { setError('请输入路径'); return }
+  const analyze = async (typeArg, pathArg) => {
+    const t = typeArg ?? sourceType
+    const p = (pathArg ?? path).trim()
+    if (!p) { setError('请输入路径'); return }
     setLoading(true)
     setError('')
     setResult(null)
@@ -56,17 +59,85 @@ export default function SourceAnalyzerModal({ onAppend, onClose }) {
       const resp = await fetch('/api/analyze_source', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: sourceType, path: path.trim() }),
+        body: JSON.stringify({ type: t, path: p }),
       })
       const data = await resp.json()
       if (data.error) { setError(data.error); return }
       setResult(data)
-      setCacheInfo(null)  // fresh result, hide cache banner
+      setCacheInfo(null)
     } catch (e) {
       setError(e.message)
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleDragOver = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+  }
+
+  const handleDrop = async (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+
+    let filePath = ''
+
+    // 1. Try text/uri-list (Safari / Firefox)
+    const uriList = e.dataTransfer.getData('text/uri-list')
+    const plain   = e.dataTransfer.getData('text/plain')
+    const raw = (uriList || plain || '').split('\n').find(l => l.trim().startsWith('file://'))
+    if (raw) {
+      filePath = decodeURIComponent(raw.trim().replace(/^file:\/\//, ''))
+    }
+
+    // 2. Try non-standard file.path (Electron / some Chromium builds)
+    if (!filePath && e.dataTransfer.files.length > 0) {
+      const f = e.dataTransfer.files[0]
+      if (f.path) filePath = f.path
+    }
+
+    // 3. Fall back: ask backend to locate by name in common dirs
+    if (!filePath && e.dataTransfer.files.length > 0) {
+      const name = e.dataTransfer.files[0].name
+      setSourceType('local')
+      setPath(`正在搜索 "${name}"...`)
+      setResult(null)
+      setError('')
+      setCacheInfo(null)
+      try {
+        const resp = await fetch(`/api/resolve_path?name=${encodeURIComponent(name)}`)
+        const data = await resp.json()
+        if (data.path) {
+          filePath = data.path
+        } else {
+          setPath(name)
+          setError(`找不到"${name}"，请手动补全完整路径`)
+          return
+        }
+      } catch {
+        setPath(name)
+        setError('路径解析失败，请手动补全完整路径')
+        return
+      }
+    }
+
+    if (!filePath) { setError('无法读取文件路径，请手动粘贴路径'); return }
+
+    setSourceType('local')
+    setPath(filePath)
+    setResult(null)
+    setError('')
+    setCacheInfo(null)
+    analyze('local', filePath)
   }
 
   const loadCache = () => {
@@ -83,7 +154,11 @@ export default function SourceAnalyzerModal({ onAppend, onClose }) {
 
   return (
     <div style={S.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={S.modal}>
+      <div style={{ ...S.modal, ...(isDragOver ? S.modalDragOver : {}) }}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
 
         {/* Header */}
         <div style={S.header}>
@@ -114,6 +189,25 @@ export default function SourceAnalyzerModal({ onAppend, onClose }) {
             onKeyDown={e => e.key === 'Enter' && !loading && analyze()}
             disabled={loading}
           />
+          {sourceType === 'local' && (
+            <button style={{ ...S.btn, opacity: loading ? 0.6 : 1 }}
+              disabled={loading}
+              onClick={async () => {
+                try {
+                  const resp = await fetch('/api/pick_folder')
+                  const data = await resp.json()
+                  if (data.path) {
+                    setPath(data.path)
+                    setResult(null)
+                    setError('')
+                    setCacheInfo(null)
+                    analyze('local', data.path)
+                  }
+                } catch (e) { setError(e.message) }
+              }}>
+              📁
+            </button>
+          )}
           <button style={{ ...S.btn, ...S.btnPrimary, opacity: loading ? 0.6 : 1 }}
             onClick={analyze} disabled={loading}>
             {loading ? '分析中' : '重新分析'}
@@ -199,10 +293,17 @@ export default function SourceAnalyzerModal({ onAppend, onClose }) {
           </div>
         )}
 
+        {isDragOver && (
+          <div style={S.dropOverlay}>
+            📁 松手即可分析
+          </div>
+        )}
+
         {!result && !loading && !cacheInfo && (
           <div style={S.hint}>
             支持 React / Vue / Flask / FastAPI / Express 等项目<br />
-            每次分析结果自动保存本地，下次免费加载
+            每次分析结果自动保存本地，下次免费加载<br />
+            <span style={{ color: 'var(--primary)', opacity: 0.8 }}>点 📁 用 Finder 选择，或把文件夹拖进来（Safari 支持）</span>
           </div>
         )}
       </div>
@@ -248,4 +349,6 @@ const S = {
   tokenRow:    { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   tokenItem:   { fontSize: 11, color: 'var(--accent)', fontFamily: 'monospace' },
   tokenSep:    { fontSize: 11, color: 'var(--border)' },
+  modalDragOver: { borderColor: 'var(--primary)', boxShadow: '0 0 0 2px var(--primary)40' },
+  dropOverlay: { background: 'var(--primary)18', border: '1.5px dashed var(--primary)', borderRadius: 8, padding: '16px 0', textAlign: 'center', fontSize: 14, color: 'var(--primary)', fontWeight: 700, letterSpacing: 0.5 },
 }

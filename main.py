@@ -30,7 +30,7 @@ WF_CACHE_DIR = os.path.join(SAVES_DIR, 'wf_cache')
 UI_DIST      = os.path.join(BASE_DIR, 'ui', 'dist')
 
 sys.path.insert(0, BASE_DIR)
-from ai.spec_generator import generate_spec
+from ai.spec_generator import generate_spec, import_cards
 from ai.wireframe_generator import generate_wireframe
 
 
@@ -91,6 +91,50 @@ class DemiurgeHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         p      = parsed.path
+
+        if p == '/api/pick_folder':
+            try:
+                import subprocess
+                result = subprocess.run(
+                    ['osascript', '-e',
+                     'POSIX path of (choose folder with prompt "选择项目文件夹")'],
+                    capture_output=True, text=True, timeout=60
+                )
+                folder = result.stdout.strip().rstrip('/')
+                if folder:
+                    self._json_response(json.dumps({'path': folder}))
+                else:
+                    self._json_response('{"path":null}')
+            except Exception as e:
+                self._json_response(json.dumps({'error': str(e)}))
+            return
+
+        if p == '/api/resolve_path':
+            qs   = urllib.parse.parse_qs(parsed.query)
+            name = qs.get('name', [''])[0].strip()
+            if not name:
+                self._json_response('{"path":null}')
+                return
+            home = os.path.expanduser('~')
+            search_roots = [
+                os.path.join(home, 'Desktop'),
+                os.path.join(home, 'Documents'),
+                os.path.join(home, 'Downloads'),
+                os.path.join(home, 'Projects'),
+                os.path.join(home, 'code'),
+                os.path.join(home, 'dev'),
+                os.path.join(home, 'workspace'),
+                os.path.join(home, 'Sites'),
+                home,
+            ]
+            found = None
+            for root in search_roots:
+                candidate = os.path.join(root, name)
+                if os.path.exists(candidate):
+                    found = candidate
+                    break
+            self._json_response(json.dumps({'path': found}))
+            return
 
         if p == '/api/projects':
             self._json_response(json.dumps(list_projects()))
@@ -212,6 +256,19 @@ class DemiurgeHandler(http.server.SimpleHTTPRequestHandler):
             spec_md      = generate_spec(payload.get('cards', []),
                                          payload.get('projectName', 'Untitled'))
             self._json_response(json.dumps({'spec': spec_md}))
+            return
+
+        if p == '/api/import_cards':
+            payload = json.loads(body)
+            text    = str(payload.get('text', ''))[:5000]
+            if not text.strip():
+                self._json_response(json.dumps({'error': '文档内容不能为空'}))
+                return
+            try:
+                cards = import_cards(text)
+                self._json_response(json.dumps({'cards': cards}, ensure_ascii=False))
+            except Exception as e:
+                self._json_response(json.dumps({'error': str(e)}))
             return
 
         if p == '/api/analyze_source':

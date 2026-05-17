@@ -15,6 +15,7 @@ export default function App() {
   const [projects, setProjects] = useState([])
   const [projPanelOpen, setProjPanelOpen] = useState(false)
   const [initialExcalidrawData, setInitialExcalidrawData] = useState(null)
+  const [specHistory, setSpecHistory] = useState([])
 
   // Refs
   const wireframeRef = useRef(null)
@@ -23,8 +24,8 @@ export default function App() {
   const saveDataRef = useRef({ slug: 'default', projectName: '', cards: [] })
 
   useEffect(() => {
-    saveDataRef.current = { slug: currentSlug, projectName, cards }
-  }, [currentSlug, projectName, cards])
+    saveDataRef.current = { slug: currentSlug, projectName, cards, specHistory }
+  }, [currentSlug, projectName, cards, specHistory])
 
   const doSave = useCallback(async () => {
     const { slug, projectName, cards } = saveDataRef.current
@@ -49,6 +50,7 @@ export default function App() {
     setInitialExcalidrawData(data.excalidrawData || null)
     excalidrawDataRef.current = data.excalidrawData || null
     setCurrentSpec('')
+    setSpecHistory(data.specHistory || [])
     setSpecLoading(false)
   }, [])
 
@@ -108,6 +110,11 @@ export default function App() {
     try {
       const spec = await api.generateSpec(cards, projectName || 'Untitled')
       setCurrentSpec(spec)
+      const entry = { spec, ts: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
+      setSpecHistory(prev => {
+        const next = [entry, ...prev].slice(0, 5)
+        return next
+      })
     } catch (e) {
       setCurrentSpec(`生成失败：${e.message}`)
     } finally {
@@ -164,6 +171,7 @@ export default function App() {
             onCardsChange={handleCardsChange}
             currentSpec={currentSpec}
             specLoading={specLoading}
+            specHistory={specHistory}
             projectName={projectName}
           />
         </div>

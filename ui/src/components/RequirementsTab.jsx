@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import TemplateModal from './TemplateModal'
+import ImportDocModal from './ImportDocModal'
 
 const TYPE_LABELS = {
   feature: '功能点',
@@ -8,12 +10,16 @@ const TYPE_LABELS = {
   constraint: '约束条件',
 }
 
-export default function RequirementsTab({ cards, onCardsChange, currentSpec, specLoading, projectName }) {
+export default function RequirementsTab({ cards, onCardsChange, currentSpec, specLoading, specHistory, projectName }) {
   const [addOpen, setAddOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [desc, setDesc] = useState('')
   const [type, setType] = useState('feature')
   const [copyDone, setCopyDone] = useState(false)
+  const [claudeDone, setClaudeDone] = useState(false)
+  const [templateOpen, setTemplateOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [historyIdx, setHistoryIdx] = useState(0)
 
   const submitCard = () => {
     if (!title.trim()) return
@@ -25,17 +31,29 @@ export default function RequirementsTab({ cards, onCardsChange, currentSpec, spe
   const deleteCard = (i) => onCardsChange(cards.filter((_, idx) => idx !== i))
 
   const copySpec = async () => {
-    if (!currentSpec) return
-    await navigator.clipboard.writeText(currentSpec)
+    if (!displaySpec) return
+    await navigator.clipboard.writeText(displaySpec)
     setCopyDone(true)
     setTimeout(() => setCopyDone(false), 1500)
   }
 
+  const displaySpec = specHistory && specHistory.length > 0
+    ? specHistory[historyIdx]?.spec
+    : currentSpec
+
+  const sendToClaudeCode = async () => {
+    if (!displaySpec) return
+    const prompt = `请根据以下 Spec 实现此项目。先运行 /init 初始化项目结构，然后逐模块实现。\n\n---\n\n${displaySpec}`
+    await navigator.clipboard.writeText(prompt)
+    setClaudeDone(true)
+    setTimeout(() => setClaudeDone(false), 1500)
+  }
+
   const downloadSpec = () => {
-    if (!currentSpec) return
+    if (!displaySpec) return
     const name = (projectName || 'demiurge-spec').replace(/\s+/g, '-').toLowerCase()
     const a = Object.assign(document.createElement('a'), {
-      href: URL.createObjectURL(new Blob([currentSpec], { type: 'text/markdown' })),
+      href: URL.createObjectURL(new Blob([displaySpec], { type: 'text/markdown' })),
       download: `${name}.md`,
     })
     a.click()
@@ -45,14 +63,17 @@ export default function RequirementsTab({ cards, onCardsChange, currentSpec, spe
   cards.forEach(c => { counts[c.type] = (counts[c.type] || 0) + 1 })
 
   return (
+    <>
     <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
       {/* Left: card board */}
       <div className="panel-board">
         <div className="panel-header">
           <span>需求画板</span>
-          <button className="btn" style={{ marginLeft: 'auto', fontSize: 11 }} onClick={() => setAddOpen(v => !v)}>
-            ＋ 添加
-          </button>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+            <button className="btn" style={{ fontSize: 11 }} onClick={() => setImportOpen(true)} title="从文档导入">导入文档</button>
+            <button className="btn" style={{ fontSize: 11 }} onClick={() => setTemplateOpen(true)} title="从模板创建">模板</button>
+            <button className="btn" style={{ fontSize: 11 }} onClick={() => setAddOpen(v => !v)}>＋ 添加</button>
+          </div>
         </div>
 
         <div className="card-list">
@@ -106,12 +127,27 @@ export default function RequirementsTab({ cards, onCardsChange, currentSpec, spe
 
       {/* Middle: spec viewer */}
       <div className="panel-spec">
-        <div className="panel-header"><span>AI Spec 预览</span></div>
+        <div className="panel-header">
+          <span>AI Spec 预览</span>
+          {specHistory && specHistory.length > 1 && (
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+              {specHistory.map((h, i) => (
+                <button key={i}
+                  style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4, cursor: 'pointer', border: '1px solid var(--border)', background: i === historyIdx ? 'var(--primary)' : 'var(--surface2)', color: i === historyIdx ? '#fff' : 'var(--text2)' }}
+                  onClick={() => setHistoryIdx(i)}
+                  title={h.ts}
+                >
+                  {i === 0 ? '最新' : `v${specHistory.length - i}`}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="spec-body">
           {specLoading ? (
             <div className="spec-generating">✦ AI 正在结构化需求...</div>
-          ) : currentSpec ? (
-            <pre>{currentSpec}</pre>
+          ) : displaySpec ? (
+            <pre>{displaySpec}</pre>
           ) : (
             <div className="spec-placeholder">
               在左侧添加需求卡片<br />然后点击右上角 <strong>✦ Generate Spec</strong>
@@ -127,6 +163,10 @@ export default function RequirementsTab({ cards, onCardsChange, currentSpec, spe
           <div>
             <div className="export-section">操作</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <button className="export-btn export-btn-claude" onClick={sendToClaudeCode} disabled={!displaySpec}>
+                <strong>{claudeDone ? '✓ 已复制！' : '⚡ 发给 Claude Code'}</strong>
+                <small>复制完整 prompt，粘贴即执行</small>
+              </button>
               <button className="export-btn" onClick={copySpec}>
                 <strong>{copyDone ? '✓ 已复制！' : '复制 Spec MD'}</strong>
                 <small>直接粘给 Claude / Gemini</small>
@@ -157,5 +197,19 @@ export default function RequirementsTab({ cards, onCardsChange, currentSpec, spe
         </div>
       </div>
     </div>
+
+    {templateOpen && (
+      <TemplateModal
+        onApply={tplCards => { onCardsChange([...cards, ...tplCards]); setAddOpen(false) }}
+        onClose={() => setTemplateOpen(false)}
+      />
+    )}
+    {importOpen && (
+      <ImportDocModal
+        onAppend={newCards => onCardsChange([...cards, ...newCards])}
+        onClose={() => setImportOpen(false)}
+      />
+    )}
+    </>
   )
 }
