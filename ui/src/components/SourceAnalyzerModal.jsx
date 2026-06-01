@@ -209,7 +209,7 @@ export default function SourceAnalyzerModal({ onAppend, onClose }) {
             </button>
           )}
           <button style={{ ...S.btn, ...S.btnPrimary, opacity: loading ? 0.6 : 1 }}
-            onClick={analyze} disabled={loading}>
+            onClick={() => analyze()} disabled={loading}>
             {loading ? '分析中' : '重新分析'}
           </button>
         </div>

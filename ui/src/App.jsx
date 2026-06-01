@@ -123,7 +123,16 @@ export default function App() {
   }, [cards, projectName])
 
   const handleExcalidrawChange = useCallback((elements, appState, files) => {
-    excalidrawDataRef.current = { elements, appState, files }
+    const sanitizedAppState = {};
+    if (appState) {
+      const safeFields = ['theme', 'viewBackgroundColor', 'gridSize', 'gridMode', 'zenModeEnabled', 'viewModeEnabled', 'zoom', 'scrollX', 'scrollY'];
+      safeFields.forEach(field => {
+        if (appState[field] !== undefined) {
+          sanitizedAppState[field] = appState[field];
+        }
+      });
+    }
+    excalidrawDataRef.current = { elements, appState: sanitizedAppState, files }
     scheduleAutoSave()
   }, [scheduleAutoSave])
 

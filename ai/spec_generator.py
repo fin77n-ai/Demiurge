@@ -92,7 +92,7 @@ def _claude_spec(cards: list, project_name: str, api_key: str) -> str:
         }
     )
     try:
-        ctx = ssl.create_default_context()
+        ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
         with urllib.request.urlopen(req, context=ctx, timeout=30) as resp:
             result = json.loads(resp.read())
             return result['content'][0]['text']
@@ -146,7 +146,7 @@ def _claude_import(text: str, api_key: str) -> list:
         }
     )
     try:
-        ctx = ssl.create_default_context()
+        ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
         with urllib.request.urlopen(req, context=ctx, timeout=30) as resp:
             result = json.loads(resp.read())
             raw = result['content'][0]['text'].strip()
@@ -175,7 +175,7 @@ def _deepseek_import(text: str, api_key: str) -> list:
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     )
     try:
-        ctx = ssl.create_default_context()
+        ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
         with urllib.request.urlopen(req, context=ctx, timeout=30) as resp:
             result = json.loads(resp.read())
             raw = result['choices'][0]['message']['content'].strip()
@@ -211,7 +211,7 @@ def _deepseek_spec(cards: list, project_name: str, api_key: str) -> str:
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     )
     try:
-        ctx = ssl.create_default_context()
+        ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
         with urllib.request.urlopen(req, context=ctx, timeout=30) as resp:
             result = json.loads(resp.read())
             return result['choices'][0]['message']['content']

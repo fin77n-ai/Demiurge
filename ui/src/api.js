@@ -8,11 +8,30 @@ export async function loadProject(slug) {
   return r.json()
 }
 
+function safeStringify(obj) {
+  const cache = new Set();
+  return JSON.stringify(obj, (key, value) => {
+    if (value instanceof HTMLElement || (value && typeof value === 'object' && 'nodeType' in value)) {
+      return undefined;
+    }
+    if (key.startsWith('__')) {
+      return undefined;
+    }
+    if (typeof value === 'object' && value !== null) {
+      if (cache.has(value)) {
+        return undefined;
+      }
+      cache.add(value);
+    }
+    return value;
+  });
+}
+
 export async function saveProject(payload) {
   await fetch('/api/projects/save', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: safeStringify(payload),
   })
 }
 
